@@ -1,5 +1,5 @@
 ' ==============================================================================
-' PicoMite MMBasic HT16K33 7-Segment Clock Program
+' PicoMite MMBasic HT16K33 1.2" 7-Segment Clock Program
 ' Displays the time from the built-in DS3231 RTC onto an I2C 7-Segment display
 ' ==============================================================================
 
@@ -7,11 +7,11 @@ Option Explicit
 
 ' --- Configuration Constants ---
 Const HT_ADDR = &H70      ' Default HT16K33 7-bit I2C address
-Const I2C_BUS = 1         ' Change if using a different physical I2C bus channel
+Const I2C_BUS = 1         ' Change to 2 if using I2C2 pins
 
 ' --- Global variables ---
 Dim Integer segFont(9)    ' Stores raw 7-segment bitmasks for numbers 0-9
-Dim Integer dispData(16)  ' 16-byte display buffer for the HT16K33
+Dim Integer dispData(15)  ' 16-byte display buffer (indices 0 to 15)
 Dim Integer blinkState = 1 ' Tracks colon blinking state
 
 ' Initialize Segment Mapping (Standard Top/A=bit0 to Middle/G=bit6 mapping)
@@ -20,9 +20,11 @@ segFont(4) = &H66: segFont(5) = &H6D: segFont(6) = &H7D: segFont(7) = &H07
 segFont(8) = &H7F: segFont(9) = &H6F
 
 ' --- Hardware Initialization ---
-Print "Initializing HT16K33 Display..."
-' I2C Close
-' I2C Open 400, 100     ' Open I2C bus at standard 400kHz speed
+Print "Initializing I2C Bus and HT16K33 Display..."
+
+' Ensure the bus is closed first, then open at a safe standard speed (100kHz)
+'I2C Close
+'I2C Open 100, 100     
 InitDisplay
 
 ' --- Main Loop ---
@@ -52,6 +54,10 @@ Sub UpdateClockDisplay
   Local String tStr = TIME$      ' MMBasic system variable auto-updated by DS3231
   Local Integer h1, h2, m1, m2
   Local Integer i
+  
+  ' Create a combined transmission buffer: 
+  ' 1 byte for target memory pointer (index 0) + 16 bytes for display data
+  Local Integer i2cBuffer(16)
 
   ' Parse time string "HH:MM:SS" into single digits
   h1 = Val(Mid$(tStr, 1, 1))
@@ -66,9 +72,9 @@ Sub UpdateClockDisplay
   dispData(0) = segFont(h1)  ' Digit 1 (Tens of Hours)
   dispData(2) = segFont(h2)  ' Digit 2 (Units of Hours)
 
-  ' Toggle the colon on register 4 (Bit 1 or 2 typically illuminates it)
+  ' Toggle the colon on register 4
   If blinkState = 1 Then
-    dispData(4) = &H02       ' Change to &HFF or &H01 if your breakout maps differently
+    dispData(4) = &H02       ' Use &H02 or &H0C for the 1.2" display colon
     blinkState = 0
   Else
     dispData(4) = &H00
@@ -78,7 +84,12 @@ Sub UpdateClockDisplay
   dispData(6) = segFont(m1)  ' Digit 3 (Tens of Minutes)
   dispData(8) = segFont(m2)  ' Digit 4 (Units of Minutes)
 
-  ' Batch send the full 16-byte display buffer sequentially starting at register 0
-  I2C Write HT_ADDR, 0, 1, 0  ' Send the target register pointer base index (0)
-  I2C Write HT_ADDR, 1, 16, dispData() ' Blast the sequence of layout data
+  ' Assemble the singular sequential payload
+  i2cBuffer(0) = 0           ' Set starting register address pointer to 0
+  For i = 0 To 15
+    i2cBuffer(i + 1) = dispData(i)
+  Next i
+
+  ' Send 17 total bytes (1 address pointer byte + 16 data bytes) starting at element 0
+  I2C Write HT_ADDR, 0, 17, i2cBuffer(0)
 End Sub
