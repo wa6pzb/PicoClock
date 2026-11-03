@@ -3,7 +3,7 @@ Implementation of a clock on a Raspberry Pi Pico using mmBasic, DS3231 RTC modul
 
 ### Requirements
 # Basic
-- [a] 12 or 24 hour settings
+- 12 or 24 hour settings
 - Use UNIX time epoch for calculations 
 - Use UTC as the reference time
 - Use time zones with UTC offsets
